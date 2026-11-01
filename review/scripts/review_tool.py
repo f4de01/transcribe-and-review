@@ -7,9 +7,12 @@ Input contract (transcript format v1, produced by the transcribe skill):
 
 review.json contract (written by the agent):
     {"findings": [{"start": "HH:MM:SS.mmm", "end": "HH:MM:SS.mmm",
-                   "risk_type": "刑事|治安|网络信息内容",
+                   "risk_type": "刑事|治安|网络信息内容|广告宣传|民事",
                    "risk": "...", "basis": "...", "advice": "..."}]}
+    {"findings": [], "conclusion": "..."}     when nothing was found: the pass opinion
 start/end are the START timestamps of the first and last segment of the span.
+conclusion is required exactly when findings is empty; it is rendered at the end of the
+report under a fixed heading, followed by the scope read from references/legal-standards.md.
 """
 import argparse
 import json
@@ -24,11 +27,17 @@ SUPPORTED_FORMATS = {'v1'}
 SEGMENT_RE = re.compile(r'^\[(\d{2}:\d{2}:\d{2}\.\d{3}) --> (\d{2}:\d{2}:\d{2}\.\d{3})\] (.*)$')
 SRT_TIME_RE = re.compile(r'^(\d{2}:\d{2}:\d{2}[,.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,.]\d{3})')
 NO_SPEECH = '（未检测到语音）'
-RISK_TYPES = ('刑事', '治安', '网络信息内容')
+RISK_TYPES = ('刑事', '治安', '网络信息内容', '广告宣传', '民事')
 VIDEO_EXTENSIONS = {'.mp4', '.mkv', '.mov', '.avi', '.webm', '.m4v', '.mpeg', '.mpg', '.wmv', '.ts'}
 WORK_DIRS = {'.work', '.venv', 'node_modules', '.git'}
 REPORT_SUFFIX = '-审查报告.docx'
 FINDINGS_FILE = 'review.json'
+LEGAL_STANDARDS = ROOT / 'references' / 'legal-standards.md'
+CHAPTER_RE = re.compile(r'^## [一二三四五六七八九十]+、(.+?)（风险类型：[^）]+）\s*$')
+SUBLAW_RE = re.compile(r'^\*\*（[一二三四五六七八九十]+）(.*?)\*\*')
+BOOK_TITLE_RE = re.compile(r'《[^》]+》')
+CONCLUSION_HEADING = '合规审查意见'
+SCOPE_PREFIX = '审查依据：'
 CHUNK_CHARS = 6000
 CONTEXT_SEGMENTS = 2
 
@@ -175,13 +184,54 @@ def show_chunk(data, index, limit=CHUNK_CHARS):
     return '\n\n'.join(out)
 
 
+def legal_scope(path=LEGAL_STANDARDS):
+    """Names of the review bases, read from the chapter headings of legal-standards.md.
+
+    A chapter is a '## N、<name>（风险类型：X）' heading; bold '**（N）《law》**' sub-headings
+    inside it are listed after the chapter name in brackets.
+    """
+    chapters = []
+    for raw in Path(path).read_text(encoding='utf-8-sig').splitlines():
+        line = raw.strip()
+        found = CHAPTER_RE.match(line)
+        if found:
+            chapters.append([found.group(1).strip(), []])
+            continue
+        if line.startswith('## '):
+            chapters.append(None)
+            continue
+        found = SUBLAW_RE.match(line)
+        if found and chapters and chapters[-1] is not None:
+            chapters[-1][1].extend(BOOK_TITLE_RE.findall(found.group(1)))
+    names = [name + ('（' + ''.join(laws) + '）' if laws else '') for name, laws in (c for c in chapters if c)]
+    if not names:
+        raise ValueError(f'{Path(path).name}: no chapter headings of the form "## N、<name>（风险类型：X）"')
+    return names
+
+
+def validate_conclusion(findings):
+    """Return the pass opinion (findings empty) or None (findings present). Raise on any defect."""
+    rows = findings['findings']
+    conclusion = findings.get('conclusion')
+    if rows:
+        if 'conclusion' in findings:
+            raise ValueError('conclusion is only allowed when findings is empty')
+        return None
+    if not isinstance(conclusion, str) or not conclusion.strip():
+        raise ValueError('findings is empty, so conclusion must be a non-empty string (the pass opinion)')
+    if '\n' in conclusion or '\r' in conclusion:
+        raise ValueError('conclusion must be a single line')
+    return conclusion.strip()
+
+
 def validate_findings(data, findings):
     """Return findings sorted, each with resolved lo/hi segment indexes. Raise on any defect."""
-    if not isinstance(findings, dict) or set(findings) != {'findings'}:
-        raise ValueError('review.json must be an object with exactly one key: findings')
+    if not isinstance(findings, dict) or not {'findings'} <= set(findings) <= {'findings', 'conclusion'}:
+        raise ValueError('review.json must be an object with the key findings and optionally conclusion')
     rows = findings['findings']
     if not isinstance(rows, list):
         raise ValueError('findings must be a list')
+    validate_conclusion(findings)
     by_start = {}
     for seg in data['segments']:
         by_start.setdefault(seg['start'], seg['index'])
@@ -218,7 +268,9 @@ def report_path(transcript_path, title):
     return Path(transcript_path).with_name(name + REPORT_SUFFIX)
 
 
-def render_docx(data, resolved, target):
+def render_docx(data, resolved, target, conclusion=None, scope=None):
+    """Write the report. conclusion (pass opinion) is rendered at the end when given;
+    scope defaults to legal_scope() and is only read when a conclusion is rendered."""
     from docx import Document
     from docx.enum.text import WD_LINE_SPACING
     from docx.oxml.ns import qn
@@ -260,6 +312,11 @@ def render_docx(data, resolved, target):
             run(p, f"处理意见：{active['advice']}", color=COLOR_ADVICE)
             run(p, '）', color=COLOR_PROBLEM)
             active = None
+    if conclusion:
+        doc.add_paragraph()
+        run(doc.add_paragraph(), CONCLUSION_HEADING, bold=True)
+        run(doc.add_paragraph(), conclusion)
+        run(doc.add_paragraph(), SCOPE_PREFIX + '、'.join(scope if scope is not None else legal_scope()) + '。')
     doc.save(str(target))
     return target
 
@@ -301,21 +358,24 @@ def load_valid(args):
     transcript = Path(args.transcript).expanduser().resolve()
     data = parse_transcript(transcript)
     findings_path = Path(args.findings).expanduser().resolve() if args.findings else transcript.with_name(FINDINGS_FILE)
-    resolved = validate_findings(data, read_json(findings_path))
-    return resolved, data, transcript, findings_path
+    findings = read_json(findings_path)
+    resolved = validate_findings(data, findings)
+    return resolved, data, transcript, findings_path, validate_conclusion(findings)
 
 
 def cmd_validate(args):
-    resolved, data, transcript, findings_path = load_valid(args)
-    emit('valid', transcript=str(transcript), findings=str(findings_path), count=len(resolved))
+    resolved, data, transcript, findings_path, conclusion = load_valid(args)
+    emit('valid', transcript=str(transcript), findings=str(findings_path), count=len(resolved),
+         conclusion=conclusion is not None)
     return 0
 
 
 def cmd_render(args):
-    resolved, data, transcript, findings_path = load_valid(args)
+    resolved, data, transcript, findings_path, conclusion = load_valid(args)
     target = Path(args.output).expanduser().resolve() if args.output else report_path(transcript, data['title'])
-    render_docx(data, resolved, target)
-    emit('rendered', report=str(target), findings=len(resolved), segments=len(data['segments']))
+    render_docx(data, resolved, target, conclusion)
+    emit('rendered', report=str(target), findings=len(resolved), segments=len(data['segments']),
+         conclusion=conclusion is not None)
     return 0
 
 
@@ -330,7 +390,7 @@ def main():
     p = sub.add_parser('validate', help='Check review.json against the transcript; non-zero exit on any defect')
     p.add_argument('transcript')
     p.add_argument('--findings')
-    p = sub.add_parser('render', help='Validate, then write <title>-审查报告.docx beside the transcript')
+    p = sub.add_parser('render', help='Validate, then write <title>-审查报告.docx beside the transcript; an empty findings list renders the conclusion as the pass opinion')
     p.add_argument('transcript')
     p.add_argument('--findings')
     p.add_argument('--output')

@@ -33,11 +33,11 @@ Copy-Item -Recurse .\transcribe-and-review\review "$HOME\.claude\skills\review"
 
 ## 法律依据
 
-审查只针对四类：诈骗罪、利用迷信破坏法律实施罪、治安管理处罚法相关条款、互联网信息内容规范。判断规则和构成要件在 [review/references/legal-standards.md](review/references/legal-standards.md)，已由律师审定；法规文本变化时在该文件修改。
+审查依据是 [review/references/legal-standards.md](review/references/legal-standards.md) 中律师审定的法规清单，风险分刑事、治安、网络信息内容、广告宣传、民事五类；每份逐字稿对整份清单审一遍，没有问题片段时报告末尾附合规审查意见。增减审查范围或法规文本变化时在该文件修改。
 
 ## 开发
 
 - 术语：[GLOSSARY.md](GLOSSARY.md)。决策：[docs/adr/](docs/adr/)。
 - 测试：`transcribe/scripts/test_transcribe.py`（文件协议，不需要模型）、`review/scripts/test_review_tool.py`（解析、校验、渲染）。在各 skill 的 `scripts/` 目录下用 `python -m unittest` 运行，review 的测试需要 python-docx。
-- 渲染样例：`review/examples/sample/` 有一份虚构课程的逐字稿和 `review.json`，`render` 后可直接打开 docx 核对版式。
+- 渲染样例：`review/examples/sample/` 是有问题片段的虚构课程，`review/examples/clean/` 是零条、附合规审查意见的虚构课程，各有逐字稿和 `review.json`，`render` 后可直接打开 docx 核对版式。
 - 真实视频的实测记录放 `docs/testing/`。

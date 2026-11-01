@@ -72,7 +72,7 @@ class ReviewToolTests(unittest.TestCase):
         cases = {
             'unknown timestamp': dict(good['findings'][0], start='00:00:30.000'),
             'end before start': dict(good['findings'][0], start='00:00:39.400', end='00:00:30.100'),
-            'bad type': dict(good['findings'][0], risk_type='民事'),
+            'bad type': dict(good['findings'][0], risk_type='合规'),
             'empty advice': dict(good['findings'][0], advice=' '),
             'multiline': dict(good['findings'][0], risk='a\nb'),
             'extra field': dict(good['findings'][0], note='x'),
@@ -85,6 +85,53 @@ class ReviewToolTests(unittest.TestCase):
             app.validate_findings(data, dict(findings=[overlap, good['findings'][1]]))
         with self.assertRaises(ValueError):
             app.validate_findings(data, dict(findings=[], extra=1))
+        for risk_type in app.RISK_TYPES:
+            app.validate_findings(data, dict(findings=[dict(good['findings'][0], risk_type=risk_type)]))
+
+    def test_conclusion_required_exactly_when_findings_empty(self):
+        transcript, findings = self.sample()
+        data = app.parse_transcript(transcript)
+        good = json.loads(findings.read_text(encoding='utf-8'))
+        for bad in (dict(findings=[]), dict(findings=[], conclusion=' '), dict(findings=[], conclusion='a\nb'),
+                    dict(good, conclusion='通过')):
+            with self.subTest(bad), self.assertRaises(ValueError):
+                app.validate_findings(data, bad)
+        passed = dict(findings=[], conclusion=' 未发现风险 ')
+        self.assertEqual(app.validate_findings(data, passed), [])
+        self.assertEqual(app.validate_conclusion(passed), '未发现风险')
+        self.assertIsNone(app.validate_conclusion(good))
+
+    def test_legal_scope_reads_chapter_headings(self):
+        names = app.legal_scope()
+        self.assertIn('诈骗罪', names)
+        self.assertTrue(any(n.startswith('互联网信息内容规范（《') for n in names))
+        standards = self.root / 'standards.md'
+        standards.write_text('# 清单\n\n## 判断总则\n\n1. x\n\n## 一、甲罪（风险类型：刑事）\n\n**法条**：x\n\n'
+                             '## 二、乙规范（风险类型：民事）\n\n**（一）《丙办法》**（2020 年）\n\n**（二）《丁规定》**\n\n'
+                             '## 三、写法\n\n**（一）《不是法》**\n', encoding='utf-8')
+        self.assertEqual(app.legal_scope(standards), ['甲罪', '乙规范（《丙办法》《丁规定》）'])
+        (self.root / 'none.md').write_text('# 空\n', encoding='utf-8')
+        with self.assertRaises(ValueError):
+            app.legal_scope(self.root / 'none.md')
+
+    def test_render_pass_opinion_from_clean_example(self):
+        source = app.ROOT / 'examples' / 'clean'
+        shutil.copytree(source, self.root / 'clean', ignore=shutil.ignore_patterns('*.docx'))
+        transcript = self.root / 'clean' / 'transcript.md'
+        data = app.parse_transcript(transcript)
+        findings = json.loads((self.root / 'clean' / 'review.json').read_text(encoding='utf-8'))
+        resolved = app.validate_findings(data, findings)
+        conclusion = app.validate_conclusion(findings)
+        target = app.report_path(transcript, data['title'])
+        app.render_docx(data, resolved, target, conclusion, scope=['甲罪', '乙规范'])
+        xml = zipfile.ZipFile(target).read('word/document.xml').decode('utf-8')
+        self.assertNotIn('w:color', xml)
+        text = re.sub(r'<[^>]+>', '', xml)
+        self.assertIn(app.CONCLUSION_HEADING + conclusion + app.SCOPE_PREFIX + '甲罪、乙规范。', text)
+        self.assertNotIn('复核', text)
+        paragraphs = re.findall(r'<w:p/>|<w:p>.*?</w:p>|<w:p .*?</w:p>', xml, re.S)
+        self.assertEqual(len(paragraphs), 1 + len(data['segments']) + 1 + 3)   # title, segments, blank, heading+body+scope
+        self.assertIn('<w:b/>', [p for p in paragraphs if app.CONCLUSION_HEADING in p][0])
 
     def test_render_colors_problem_spans_and_advice(self):
         transcript, findings = self.sample()

@@ -115,8 +115,8 @@ macOS 把 `py -3.11` 换成 `python3.11`，把 `.\.venv\Scripts\python.exe` 换�
 
 - **transcript.md**：首行格式标记，然后 `# 视频名`，每段一行 `[00:00:01.200 --> 00:00:04.500] 文字`。
 - **changes.json / complete.json**：修复记录和完成标记，不用动。
-- **review.json**：审查结果，每条含起止时间戳、风险类型（刑事 / 治安 / 网络信息内容）、风险提示、法规依据、处理意见。改了它可以让 agent 重新 `render`，不必重审。
-- **<视频名>-审查报告.docx**：逐字稿全文。问题片段连同时间戳红字；片段后另起一行，括号内红字是风险提示和依据，黄字是处理意见。无问题时就是一份普通的逐字稿。
+- **review.json**：审查结果，每条含起止时间戳、风险类型（刑事 / 治安 / 网络信息内容 / 广告宣传 / 民事）、风险提示、法规依据、处理意见。没有问题片段时 `findings` 为空，另有一个 `conclusion` 字段是通过意见。改了它可以让 agent 重新 `render`，不必重审。
+- **<视频名>-审查报告.docx**：逐字稿全文。问题片段连同时间戳红字；片段后另起一行，括号内红字是风险提示和依据，黄字是处理意见。无问题时末尾附"合规审查意见"：一段结论和一行审查依据，依据名单从 `legal-standards.md` 的章节标题自动生成。
 
 ## 6. 中断与重跑
 
@@ -137,6 +137,8 @@ macOS 把 `py -3.11` 换成 `python3.11`，把 `.\.venv\Scripts\python.exe` 换�
 | `unsupported transcript format` | 格式标记版本不认识 | 更新 review skill |
 | `is not a segment start timestamp` | review.json 里的时间戳和逐字稿对不上 | agent 会自行修正；手工改过 review.json 时核对时间戳 |
 | `findings overlap` | 两个问题片段重叠 | 合并成一条 |
+| `conclusion must be a non-empty string` | 没有问题片段但 review.json 缺通过意见 | agent 会补写 `conclusion`；手工改过 review.json 时补上 |
+| `conclusion is only allowed when findings is empty` | 有问题片段却带了 `conclusion` | 删掉 `conclusion` |
 | `exists with different content` | SRT 旁已有不同内容的 transcript.md | 移走旧文件，或直接审查那份 .md |
 | `Incomplete local model` | 语音模型没下载完 | 重新执行 `prepare` |
 | 子 agent 模型不可用 | 宿主不提供表中模型 | 从 agent 列出的候选里选一个，或改 config.json |
