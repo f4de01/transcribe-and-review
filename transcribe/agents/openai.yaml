@@ -1,0 +1,4 @@
+interface:
+  display_name: "视频转写"
+  short_description: "本地识别中英文课程视频，由固定模型的子 agent 修复，输出带时间戳的 Markdown 逐字稿"
+  default_prompt: "使用 $transcribe 转写指定视频，输出 Markdown 逐字稿。"

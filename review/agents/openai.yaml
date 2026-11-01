@@ -1,0 +1,4 @@
+interface:
+  display_name: "课程法律审查"
+  short_description: "对课程逐字稿做法律审查，输出带红黄标注的审查报告 docx"
+  default_prompt: "使用 $review 审查指定逐字稿或课程视频，输出审查报告。"

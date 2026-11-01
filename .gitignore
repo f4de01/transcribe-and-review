@@ -1,0 +1,8 @@
+.test-*/
+__pycache__/
+*.pyc
+transcribe/.venv/
+transcribe/models/
+review/.venv/
+转写结果/
+~$*.docx
