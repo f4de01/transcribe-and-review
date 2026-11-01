@@ -1,4 +1,4 @@
-# 视频直出文案附审查
+# transcribe&review
 
 两个可独立安装的 agent skill，把课程视频变成带时间戳的逐字稿，再对逐字稿做法律审查并出具审查报告 docx。适用于 Claude Code、Codex 和其他读取 `SKILL.md` 的 agent。
 
@@ -22,9 +22,9 @@
 PowerShell 示例（Claude Code）：
 
 ```powershell
-git clone https://github.com/f4de01/shipin-zhichu-wenan-fu-shencha.git
-Copy-Item -Recurse .\shipin-zhichu-wenan-fu-shencha\transcribe "$HOME\.claude\skills\transcribe"
-Copy-Item -Recurse .\shipin-zhichu-wenan-fu-shencha\review "$HOME\.claude\skills\review"
+git clone https://github.com/f4de01/transcribe-and-review.git
+Copy-Item -Recurse .\transcribe-and-review\transcribe "$HOME\.claude\skills\transcribe"
+Copy-Item -Recurse .\transcribe-and-review\review "$HOME\.claude\skills\review"
 ```
 
 两个 skill 都不会被 agent 自动触发，只在用户明确引用时运行。首次运行时 agent 会按各自 `references/setup.md` 建立独立的 Python 环境；`transcribe` 另需下载本地语音模型。

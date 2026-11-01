@@ -10,7 +10,7 @@ disable-model-invocation: true
 
 ## 输入分流
 
-- **视频文件或含视频的目录**：按此顺序查找 transcribe skill：`./.claude/skills/transcribe/SKILL.md`、`./.agents/skills/transcribe/SKILL.md`、`./.codex/skills/transcribe/SKILL.md`，再查用户主目录下同名三个位置。找到就完整执行它（输出目录用用户指定的，未指定则放视频旁的 `转写结果`），拿到每份 `transcript.md` 后回到本流程。找不到就停止，告诉用户安装地址 https://github.com/f4de01/shipin-zhichu-wenan-fu-shencha ，不自行转写。
+- **视频文件或含视频的目录**：按此顺序查找 transcribe skill：`./.claude/skills/transcribe/SKILL.md`、`./.agents/skills/transcribe/SKILL.md`、`./.codex/skills/transcribe/SKILL.md`，再查用户主目录下同名三个位置。找到就完整执行它（输出目录用用户指定的，未指定则放视频旁的 `转写结果`），拿到每份 `transcript.md` 后回到本流程。找不到就停止，告诉用户安装地址 https://github.com/f4de01/transcribe-and-review ，不自行转写。
 - **逐字稿（.md）、字幕（.srt）或含它们的目录**：执行 `PYTHON SCRIPT normalize INPUT`。SRT 会先转成同目录的 `transcript.md`。每份逐字稿输出一行 JSON，含 `path`、`title`、`segments`、`chunks`、`findings_path`、`report_path`；`warnings` 里的 “no format marker” 是旧逐字稿，照常审查；`error` 行（无时间戳文本、格式不认识）向用户说明原因并跳过该份。
 
 首次运行时按 [references/setup.md](references/setup.md) 建环境。下文 `PYTHON` 指该环境 Python 的绝对路径，`SCRIPT` 指本 skill 的 `scripts/review_tool.py`；调用时替换成真实路径。
